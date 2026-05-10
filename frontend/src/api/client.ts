@@ -1,4 +1,22 @@
-const BASE = "/api";
+const BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : "/api";
+
+function _storedKey(): string {
+  try { return localStorage.getItem("anthropic_api_key") ?? ""; }
+  catch { return ""; }
+}
+
+export function setApiKey(key: string): void {
+  try {
+    if (key) localStorage.setItem("anthropic_api_key", key);
+    else localStorage.removeItem("anthropic_api_key");
+  } catch { /* storage blocked */ }
+}
+
+export function getApiKey(): string {
+  return _storedKey();
+}
 
 export interface AuditStatus {
   audit_id: string;
@@ -31,6 +49,14 @@ export interface AuditSummary {
   by_file: Record<string, number>;
 }
 
+export interface AIInsights {
+  available: boolean;
+  summary: string;
+  top_issues: string[];
+  recommended_steps: string[];
+  architecture_notes: string;
+}
+
 export interface AuditResult {
   audit_id: string;
   score: number;
@@ -38,6 +64,33 @@ export interface AuditResult {
   summary: AuditSummary;
   graph_stats: Record<string, number | string>;
   source_path: string;
+  ai_insights?: AIInsights;
+  stats?: {
+    files_processed: number;
+    symbols_found: number;
+    calls_found: number;
+  };
+}
+
+export interface AIFix {
+  available: boolean;
+  explanation: string;
+  before: string;
+  after: string;
+  caveats: string;
+}
+
+export interface AuditHistoryEntry {
+  audit_id: string;
+  source_path: string;
+  score: number;
+  total: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  by_type: Record<string, number>;
+  created_at: string;
 }
 
 export interface RecentAudit {
@@ -50,9 +103,12 @@ export interface RecentAudit {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const key = _storedKey();
+  const baseHeaders: Record<string, string> = { "Content-Type": "application/json" };
+  if (key) baseHeaders["X-Anthropic-Api-Key"] = key;
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: { ...baseHeaders, ...(init?.headers as Record<string, string> ?? {}) },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -76,4 +132,22 @@ export const api = {
 
   listAudits: () =>
     request<{ audits: RecentAudit[] }>("/audit/list"),
+
+  askQuestion: (auditId: string, question: string) =>
+    request<{ answer: string }>("/qa/ask", {
+      method: "POST",
+      body: JSON.stringify({ audit_id: auditId, question }),
+    }),
+
+  getAIFix: (finding: Finding) =>
+    request<AIFix>("/qa/fix", {
+      method: "POST",
+      body: JSON.stringify({ finding }),
+    }),
+
+  downloadHTML: (auditId: string) => `${BASE}/report/${auditId}/html`,
+  downloadMarkdown: (auditId: string) => `${BASE}/report/${auditId}/markdown`,
+
+  getHistory: () =>
+    request<{ history: AuditHistoryEntry[] }>("/history"),
 };

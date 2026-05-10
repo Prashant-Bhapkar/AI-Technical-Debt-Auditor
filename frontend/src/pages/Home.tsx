@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Github, FolderOpen, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Search, Github, FolderOpen, Clock, CheckCircle, XCircle, Loader2, TrendingUp } from "lucide-react";
 import { api, type AuditStatus, type RecentAudit } from "../api/client";
 import clsx from "clsx";
 
@@ -118,10 +118,20 @@ export default function Home() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-16">
       {/* Header */}
       <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 text-sky-400 text-sm font-medium bg-sky-900/30
-                        border border-sky-800 px-3 py-1 rounded-full mb-4">
-          <Search size={12} />
-          AI-Powered Code Analysis
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <div className="inline-flex items-center gap-2 text-sky-400 text-sm font-medium bg-sky-900/30
+                          border border-sky-800 px-3 py-1 rounded-full">
+            <Search size={12} />
+            AI-Powered Code Analysis
+          </div>
+          <button
+            onClick={() => navigate("/trends")}
+            className="inline-flex items-center gap-1.5 text-gray-400 hover:text-gray-200 text-sm
+                       border border-gray-700 hover:border-gray-500 px-3 py-1 rounded-full transition-colors"
+          >
+            <TrendingUp size={12} />
+            Trends
+          </button>
         </div>
         <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">
           Technical Debt Auditor

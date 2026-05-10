@@ -2,17 +2,19 @@ import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft, Download, Filter, SortDesc, AlertTriangle,
-  CheckCircle, Info, Zap, BarChart2,
+  ArrowLeft, Download, Filter, SortDesc, CheckCircle, FileText, TrendingUp,
 } from "lucide-react";
-import { api, type Finding } from "../api/client";
+import { api, type Finding, type AIInsights } from "../api/client";
 import FindingCard from "../components/FindingCard";
 import DebtScoreGauge from "../components/DebtScoreGauge";
 import CategoryBreakdown from "../components/CategoryBreakdown";
+import AIInsightsPanel from "../components/AIInsightsPanel";
+import QAChat from "../components/QAChat";
 import clsx from "clsx";
 
 type SeverityFilter = "all" | "critical" | "high" | "medium" | "low";
 type TypeFilter = "all" | string;
+type Tab = "findings" | "ai";
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -32,6 +34,7 @@ export default function AuditReport() {
   const navigate = useNavigate();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [activeTab, setActiveTab] = useState<Tab>("findings");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["audit-result", auditId],
@@ -79,7 +82,7 @@ export default function AuditReport() {
     );
   }
 
-  const { score, summary, findings, source_path } = data;
+  const { score, summary, findings, source_path, ai_insights } = data;
 
   return (
     <div className="min-h-screen max-w-6xl mx-auto px-4 py-8">
@@ -92,14 +95,40 @@ export default function AuditReport() {
           <ArrowLeft size={16} />
           New Audit
         </button>
-        <button
-          onClick={handleDownloadJSON}
-          className="flex items-center gap-2 text-sky-400 hover:text-sky-300 text-sm border
-                     border-sky-800 hover:border-sky-600 px-3 py-1.5 rounded-lg transition-colors"
-        >
-          <Download size={14} />
-          Download JSON
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/trends")}
+            className="flex items-center gap-2 text-gray-400 hover:text-gray-200 text-sm border
+                       border-gray-700 hover:border-gray-500 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <TrendingUp size={14} />
+            Trends
+          </button>
+          <a
+            href={auditId ? api.downloadMarkdown(auditId) : "#"}
+            className="flex items-center gap-2 text-gray-400 hover:text-gray-200 text-sm border
+                       border-gray-700 hover:border-gray-500 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <FileText size={14} />
+            .md
+          </a>
+          <a
+            href={auditId ? api.downloadHTML(auditId) : "#"}
+            className="flex items-center gap-2 text-gray-400 hover:text-gray-200 text-sm border
+                       border-gray-700 hover:border-gray-500 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <FileText size={14} />
+            .html
+          </a>
+          <button
+            onClick={handleDownloadJSON}
+            className="flex items-center gap-2 text-sky-400 hover:text-sky-300 text-sm border
+                       border-sky-800 hover:border-sky-600 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Download size={14} />
+            .json
+          </button>
+        </div>
       </div>
 
       {/* Title */}
@@ -139,7 +168,7 @@ export default function AuditReport() {
         </div>
       </div>
 
-      {/* Charts + graph stats */}
+      {/* Charts row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-gray-800/60 border border-gray-700 rounded-2xl p-5">
           <CategoryBreakdown byType={summary.by_type} />
@@ -159,79 +188,108 @@ export default function AuditReport() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        <div className="flex items-center gap-1 text-xs text-gray-400 mr-2">
-          <Filter size={12} />
-          Severity:
-        </div>
-        {(["all", "critical", "high", "medium", "low"] as SeverityFilter[]).map((s) => (
+      {/* Tab switcher */}
+      <div className="flex gap-1 mb-6 bg-gray-800/60 border border-gray-700 rounded-xl p-1 w-fit">
+        {(["findings", "ai"] as Tab[]).map((tab) => (
           <button
-            key={s}
-            onClick={() => setSeverityFilter(s)}
+            key={tab}
+            onClick={() => setActiveTab(tab)}
             className={clsx(
-              "text-xs px-3 py-1 rounded-full border transition-colors capitalize",
-              severityFilter === s
-                ? "bg-sky-600 border-sky-500 text-white"
-                : "border-gray-600 text-gray-400 hover:border-gray-400"
+              "text-sm px-4 py-1.5 rounded-lg capitalize transition-colors",
+              activeTab === tab
+                ? "bg-sky-600 text-white"
+                : "text-gray-400 hover:text-gray-200"
             )}
           >
-            {s === "all" ? `All (${findings.length})` : s}
+            {tab === "ai" ? "AI Insights & Q&A" : "Findings"}
           </button>
         ))}
+      </div>
 
-        {allTypes.length > 0 && (
-          <>
-            <div className="flex items-center gap-1 text-xs text-gray-400 mx-2">
-              <SortDesc size={12} />
-              Type:
+      {activeTab === "ai" && (
+        <div className="space-y-4">
+          {ai_insights && <AIInsightsPanel insights={ai_insights} />}
+          {auditId && <QAChat auditId={auditId} />}
+        </div>
+      )}
+
+      {activeTab === "findings" && (
+        <>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 mb-5">
+            <div className="flex items-center gap-1 text-xs text-gray-400 mr-2">
+              <Filter size={12} />
+              Severity:
             </div>
-            <button
-              onClick={() => setTypeFilter("all")}
-              className={clsx(
-                "text-xs px-3 py-1 rounded-full border transition-colors",
-                typeFilter === "all"
-                  ? "bg-sky-600 border-sky-500 text-white"
-                  : "border-gray-600 text-gray-400 hover:border-gray-400"
-              )}
-            >
-              All types
-            </button>
-            {allTypes.map((t) => (
+            {(["all", "critical", "high", "medium", "low"] as SeverityFilter[]).map((s) => (
               <button
-                key={t}
-                onClick={() => setTypeFilter(t)}
+                key={s}
+                onClick={() => setSeverityFilter(s)}
                 className={clsx(
                   "text-xs px-3 py-1 rounded-full border transition-colors capitalize",
-                  typeFilter === t
+                  severityFilter === s
                     ? "bg-sky-600 border-sky-500 text-white"
                     : "border-gray-600 text-gray-400 hover:border-gray-400"
                 )}
               >
-                {t.replace(/_/g, " ")}
+                {s === "all" ? `All (${findings.length})` : s}
               </button>
             ))}
-          </>
-        )}
-      </div>
 
-      {/* Findings count */}
-      <p className="text-sm text-gray-400 mb-4">
-        Showing {filtered.length} of {findings.length} findings, sorted by priority
-      </p>
+            {allTypes.length > 0 && (
+              <>
+                <div className="flex items-center gap-1 text-xs text-gray-400 mx-2">
+                  <SortDesc size={12} />
+                  Type:
+                </div>
+                <button
+                  onClick={() => setTypeFilter("all")}
+                  className={clsx(
+                    "text-xs px-3 py-1 rounded-full border transition-colors",
+                    typeFilter === "all"
+                      ? "bg-sky-600 border-sky-500 text-white"
+                      : "border-gray-600 text-gray-400 hover:border-gray-400"
+                  )}
+                >
+                  All types
+                </button>
+                {allTypes.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTypeFilter(t)}
+                    className={clsx(
+                      "text-xs px-3 py-1 rounded-full border transition-colors capitalize",
+                      typeFilter === t
+                        ? "bg-sky-600 border-sky-500 text-white"
+                        : "border-gray-600 text-gray-400 hover:border-gray-400"
+                    )}
+                  >
+                    {t.replace(/_/g, " ")}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
 
-      {/* Findings list */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <CheckCircle size={40} className="mx-auto mb-3 text-green-500 opacity-50" />
-          <p className="text-lg font-medium text-gray-300">No findings match this filter</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((finding, i) => (
-            <FindingCard key={`${finding.file}-${finding.line}-${i}`} finding={finding} index={i} />
-          ))}
-        </div>
+          {/* Findings count */}
+          <p className="text-sm text-gray-400 mb-4">
+            Showing {filtered.length} of {findings.length} findings, sorted by priority
+          </p>
+
+          {/* Findings list */}
+          {filtered.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">
+              <CheckCircle size={40} className="mx-auto mb-3 text-green-500 opacity-50" />
+              <p className="text-lg font-medium text-gray-300">No findings match this filter</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((finding, i) => (
+                <FindingCard key={`${finding.file}-${finding.line}-${i}`} finding={finding} index={i} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
