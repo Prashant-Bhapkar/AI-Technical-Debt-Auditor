@@ -60,7 +60,8 @@ The API key is entered in the UI, stored only in your browser, and never saved o
 ![Home](docs/screenshots/home.png)
 
 **Audit Report — scored findings with file + line references**
-![Report](docs/screenshots/report.png)
+![Report1](docs/screenshots/report1.png)
+![Report2](docs/screenshots/report2.png)
 
 **AI Insights & Q&A — architecture analysis + chat**
 ![AI Insights](docs/screenshots/ai-insights.png)
