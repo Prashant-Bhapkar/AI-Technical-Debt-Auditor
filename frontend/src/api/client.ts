@@ -118,7 +118,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  startAudit: (body: { repo_url?: string; local_path?: string }) =>
+  startAudit: (body: { repo_url: string; checkers?: string[] }) =>
     request<{ audit_id: string }>("/audit/start", {
       method: "POST",
       body: JSON.stringify(body),

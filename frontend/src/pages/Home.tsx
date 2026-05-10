@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Github, FolderOpen, Clock, CheckCircle, XCircle, Loader2, TrendingUp } from "lucide-react";
-import { api, type AuditStatus, type RecentAudit } from "../api/client";
+import { Search, Github, Clock, CheckCircle, XCircle, Loader2, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { api, type AuditStatus, type RecentAudit, getApiKey } from "../api/client";
 import clsx from "clsx";
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -13,6 +13,23 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   cloning: <Loader2 size={14} className="text-yellow-400 animate-spin" />,
   queued: <Clock size={14} className="text-gray-400" />,
 };
+
+const STATIC_CHECKERS = [
+  { id: "dead_code",         icon: "🔍", label: "Dead Code",         desc: "Functions with zero callers" },
+  { id: "complexity",        icon: "📊", label: "Complexity",        desc: "Cyclomatic complexity spikes" },
+  { id: "error_handling",    icon: "🛡️", label: "Error Handling",    desc: "Unguarded I/O & network calls" },
+  { id: "security",          icon: "🔐", label: "Security",          desc: "Secrets, eval(), SQL injection" },
+  { id: "observability",     icon: "📡", label: "Observability",     desc: "Functions missing logging" },
+  { id: "test_coverage",     icon: "🧪", label: "Test Coverage",     desc: "Untested public functions" },
+  { id: "outdated_patterns", icon: "⚠️", label: "Outdated Patterns", desc: "Deprecated Python patterns" },
+  { id: "duplicates",        icon: "📋", label: "Duplicates",        desc: "Similar / copy-paste code" },
+];
+
+const AI_CHECKERS = [
+  { id: "ai_insights", icon: "🤖", label: "AI Insights & Q&A", desc: "Architecture summary + chat — requires API key" },
+];
+
+const ALL_STATIC_IDS = new Set(STATIC_CHECKERS.map((c) => c.id));
 
 function ProgressBar({ value, label }: { value: number; label: string }) {
   return (
@@ -55,13 +72,25 @@ export default function Home() {
   const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [activeAuditId, setActiveAuditId] = useState<string | null>(null);
+  const [selectedCheckers, setSelectedCheckers] = useState<Set<string>>(new Set(ALL_STATIC_IDS));
+  const [showCheckers, setShowCheckers] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const toggleChecker = (id: string) => {
+    setSelectedCheckers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const aiSelected = selectedCheckers.has("ai_insights");
+  const hasApiKey = !!getApiKey();
+
   const startMutation = useMutation({
-    mutationFn: (value: string) => {
-      const isUrl = value.includes("github.com") || value.startsWith("http");
-      return isUrl ? api.startAudit({ repo_url: value }) : api.startAudit({ local_path: value });
-    },
+    mutationFn: ({ url, checkers }: { url: string; checkers: string[] }) =>
+      api.startAudit({ repo_url: url, checkers }),
     onSuccess: (data) => setActiveAuditId(data.audit_id),
   });
 
@@ -78,7 +107,6 @@ export default function Home() {
     refetchInterval: 5000,
   });
 
-  // Poll status while audit is running
   useEffect(() => {
     if (!activeAuditId) return;
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -107,12 +135,11 @@ export default function Home() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isRunning) return;
+    const url = input.trim();
+    if (!url || isRunning) return;
     setActiveAuditId(null);
-    startMutation.mutate(input.trim());
+    startMutation.mutate({ url, checkers: Array.from(selectedCheckers) });
   };
-
-  const isGithub = input.includes("github.com");
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-16">
@@ -137,23 +164,24 @@ export default function Home() {
           Technical Debt Auditor
         </h1>
         <p className="text-gray-400 text-lg max-w-xl">
-          Point it at any GitHub repo or local folder. Get a prioritized debt
-          report with exact file + line references in seconds.
+          Point it at any public GitHub repo. Get a prioritized debt report
+          with exact file + line references in seconds.
         </p>
       </div>
 
       {/* Input card */}
       <div className="w-full max-w-2xl bg-gray-800/60 border border-gray-700 rounded-2xl p-6 shadow-2xl">
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* URL input */}
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              {isGithub ? <Github size={18} /> : <FolderOpen size={18} />}
+              <Github size={18} />
             </div>
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="https://github.com/owner/repo  or  C:\path\to\project"
+              placeholder="https://github.com/owner/repo"
               disabled={isRunning}
               className="w-full bg-gray-900/80 border border-gray-600 rounded-xl pl-10 pr-4 py-3
                          text-gray-100 placeholder-gray-500 text-sm focus:outline-none
@@ -162,35 +190,107 @@ export default function Home() {
             />
           </div>
 
+          {/* Checker selection toggle */}
+          <button
+            type="button"
+            onClick={() => setShowCheckers((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {showCheckers ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            Choose checks to run
+            <span className="ml-1 text-sky-500">
+              {selectedCheckers.size} / {STATIC_CHECKERS.length + AI_CHECKERS.length} selected
+            </span>
+          </button>
+
+          {showCheckers && (
+            <div className="space-y-3">
+              {/* Static checkers */}
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Static Analysis — no API key needed</p>
+              <div className="grid grid-cols-2 gap-2">
+                {STATIC_CHECKERS.map((c) => {
+                  const on = selectedCheckers.has(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleChecker(c.id)}
+                      className={clsx(
+                        "flex items-start gap-2 p-2.5 rounded-lg border text-left transition-colors text-xs",
+                        on
+                          ? "bg-sky-900/30 border-sky-700 text-sky-200"
+                          : "bg-gray-800/40 border-gray-700 text-gray-500 hover:border-gray-500"
+                      )}
+                    >
+                      <span className="text-base leading-none mt-0.5">{c.icon}</span>
+                      <div>
+                        <div className="font-semibold">{c.label}</div>
+                        <div className="opacity-70 mt-0.5">{c.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* AI checkers */}
+              <p className="text-xs text-gray-500 uppercase tracking-wider mt-1">AI Features — requires Anthropic API key</p>
+              <div className="grid grid-cols-1 gap-2">
+                {AI_CHECKERS.map((c) => {
+                  const on = selectedCheckers.has(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleChecker(c.id)}
+                      className={clsx(
+                        "flex items-start gap-2 p-2.5 rounded-lg border text-left transition-colors text-xs",
+                        on
+                          ? "bg-purple-900/30 border-purple-700 text-purple-200"
+                          : "bg-gray-800/40 border-gray-700 text-gray-500 hover:border-gray-500"
+                      )}
+                    >
+                      <span className="text-base leading-none mt-0.5">{c.icon}</span>
+                      <div>
+                        <div className="font-semibold">{c.label}</div>
+                        <div className="opacity-70 mt-0.5">{c.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* API key warning */}
+              {aiSelected && !hasApiKey && (
+                <p className="text-xs text-amber-400 bg-amber-900/20 border border-amber-800 rounded-lg px-3 py-2">
+                  AI Insights selected but no API key set. Add your Anthropic key in the bar at the top of the page.
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={!input.trim() || isRunning}
+            disabled={!input.trim() || isRunning || selectedCheckers.size === 0}
             className="w-full bg-sky-600 hover:bg-sky-500 disabled:bg-gray-700 disabled:text-gray-500
                        text-white font-semibold py-3 rounded-xl transition-colors flex items-center
                        justify-center gap-2"
           >
             {isRunning ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Auditing...
-              </>
+              <><Loader2 size={16} className="animate-spin" />Auditing...</>
             ) : (
-              <>
-                <Search size={16} />
-                Start Audit
-              </>
+              <><Search size={16} />Start Audit</>
             )}
           </button>
         </form>
 
-        {/* Progress section */}
+        {/* Progress */}
         {isRunning && statusData && (
           <div className="mt-6 space-y-3">
             <ProgressBar value={statusData.progress} label={statusData.phase} />
           </div>
         )}
 
-        {/* Error */}
+        {/* Errors */}
         {startMutation.isError && (
           <p className="mt-4 text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-lg p-3">
             {startMutation.error?.message}
@@ -222,19 +322,36 @@ export default function Home() {
         </div>
       )}
 
-      {/* Feature bullets */}
-      <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl w-full text-sm text-gray-400">
-        {[
-          { icon: "🔍", title: "Dead Code", desc: "Find functions with zero callers via call graph" },
-          { icon: "📊", title: "Complexity", desc: "Flag cyclomatic complexity over threshold" },
-          { icon: "🛡️", title: "Error Handling", desc: "Detect unguarded I/O and network calls" },
-        ].map((f) => (
-          <div key={f.title} className="bg-gray-800/40 border border-gray-700 rounded-xl p-4">
-            <div className="text-2xl mb-2">{f.icon}</div>
-            <div className="font-semibold text-gray-200 mb-1">{f.title}</div>
-            <div>{f.desc}</div>
+      {/* Feature grid — all 8 checkers + AI */}
+      <div className="mt-16 w-full max-w-2xl">
+        <p className="text-xs text-gray-500 uppercase tracking-wider mb-4 text-center">What gets analyzed</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm text-gray-400">
+          {[
+            { icon: "🔍", title: "Dead Code",         desc: "Zero-caller functions" },
+            { icon: "📊", title: "Complexity",        desc: "Cyclomatic spikes" },
+            { icon: "🛡️", title: "Error Handling",   desc: "Unguarded I/O calls" },
+            { icon: "🔐", title: "Security",          desc: "Secrets & injections" },
+            { icon: "📡", title: "Observability",     desc: "Missing logging" },
+            { icon: "🧪", title: "Test Coverage",     desc: "Untested functions" },
+            { icon: "⚠️", title: "Outdated Patterns", desc: "Deprecated patterns" },
+            { icon: "📋", title: "Duplicates",        desc: "Copy-paste code" },
+          ].map((f) => (
+            <div key={f.title} className="bg-gray-800/40 border border-gray-700 rounded-xl p-3">
+              <div className="text-xl mb-1">{f.icon}</div>
+              <div className="font-semibold text-gray-200 text-xs mb-0.5">{f.title}</div>
+              <div className="text-xs">{f.desc}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3">
+          <div className="bg-purple-900/20 border border-purple-800 rounded-xl p-3 flex items-center gap-3 text-sm">
+            <span className="text-xl">🤖</span>
+            <div>
+              <span className="font-semibold text-purple-300">AI Insights & Q&A</span>
+              <span className="text-gray-400 ml-2 text-xs">Architecture analysis, root-cause chat, and before/after code fixes · Requires Anthropic API key</span>
+            </div>
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );

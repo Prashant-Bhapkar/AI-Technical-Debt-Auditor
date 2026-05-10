@@ -46,7 +46,22 @@ def _get(audit_id: str) -> dict | None:
 
 # ── Background worker ─────────────────────────────────────────────────────────
 
-def _run_audit(audit_id: str, source_path: str, temp_dir: str | None = None, api_key: str | None = None):
+_ALL_CHECKERS = {
+    "dead_code", "complexity", "error_handling",
+    "security", "observability", "test_coverage",
+    "outdated_patterns", "duplicates", "ai_insights",
+}
+
+
+def _run_audit(
+    audit_id: str,
+    source_path: str,
+    temp_dir: str | None = None,
+    api_key: str | None = None,
+    checkers: set | None = None,
+):
+    run = checkers if checkers is not None else _ALL_CHECKERS
+
     try:
         _store(audit_id, status="indexing", progress=5, phase="Setting up workspace")
 
@@ -61,30 +76,39 @@ def _run_audit(audit_id: str, source_path: str, temp_dir: str | None = None, api
         stats = indexer.index_project(source_path, db_path, on_progress)
 
         # ── Layer 1 checkers ──────────────────────────────────────────────────
-        _store(audit_id, status="analyzing", progress=28, phase="Checking dead code")
-        findings = dead_code.check(db_path)
+        findings = []
+        if "dead_code" in run:
+            _store(audit_id, status="analyzing", progress=28, phase="Checking dead code")
+            findings += dead_code.check(db_path)
 
-        _store(audit_id, progress=36, phase="Checking cyclomatic complexity")
-        findings += complexity.check(db_path)
+        if "complexity" in run:
+            _store(audit_id, progress=36, phase="Checking cyclomatic complexity")
+            findings += complexity.check(db_path)
 
-        _store(audit_id, progress=44, phase="Checking error handling")
-        findings += error_handling.check(db_path, source_path)
+        if "error_handling" in run:
+            _store(audit_id, progress=44, phase="Checking error handling")
+            findings += error_handling.check(db_path, source_path)
 
         # ── Layer 2 checkers ──────────────────────────────────────────────────
-        _store(audit_id, progress=52, phase="Checking security patterns")
-        findings += security.check(db_path, source_path)
+        if "security" in run:
+            _store(audit_id, progress=52, phase="Checking security patterns")
+            findings += security.check(db_path, source_path)
 
-        _store(audit_id, progress=60, phase="Checking observability")
-        findings += observability.check(db_path, source_path)
+        if "observability" in run:
+            _store(audit_id, progress=60, phase="Checking observability")
+            findings += observability.check(db_path, source_path)
 
-        _store(audit_id, progress=66, phase="Checking test coverage")
-        findings += test_coverage.check(db_path, source_path)
+        if "test_coverage" in run:
+            _store(audit_id, progress=66, phase="Checking test coverage")
+            findings += test_coverage.check(db_path, source_path)
 
-        _store(audit_id, progress=72, phase="Checking outdated patterns")
-        findings += outdated_patterns.check(db_path, source_path)
+        if "outdated_patterns" in run:
+            _store(audit_id, progress=72, phase="Checking outdated patterns")
+            findings += outdated_patterns.check(db_path, source_path)
 
-        _store(audit_id, progress=78, phase="Checking for duplicate code")
-        findings += duplicates.check(db_path, source_path)
+        if "duplicates" in run:
+            _store(audit_id, progress=78, phase="Checking for duplicate code")
+            findings += duplicates.check(db_path, source_path)
 
         # ── Prioritise ────────────────────────────────────────────────────────
         _store(audit_id, progress=84, phase="Prioritizing findings")
@@ -94,8 +118,10 @@ def _run_audit(audit_id: str, source_path: str, temp_dir: str | None = None, api
         graph_stats = get_stats(db_path)
 
         # ── Layer 3: AI insights (optional — needs API key) ───────────────────
-        _store(audit_id, progress=91, phase="Generating AI insights")
-        ai_insights = ai_analyzer.generate_insights(findings, source_path, api_key=api_key)
+        ai_insights = {"available": False, "summary": "", "top_issues": [], "recommended_steps": [], "architecture_notes": ""}
+        if "ai_insights" in run:
+            _store(audit_id, progress=91, phase="Generating AI insights")
+            ai_insights = ai_analyzer.generate_insights(findings, source_path, api_key=api_key)
 
         completed_result = {
                 "score": score,
@@ -142,6 +168,9 @@ def start_audit():
         return jsonify(error="Provide repo_url or local_path"), 400
 
     user_api_key = request.headers.get("X-Anthropic-Api-Key", "").strip() or None
+    requested_checkers = body.get("checkers")
+    checkers = (set(requested_checkers) & _ALL_CHECKERS) if requested_checkers else None
+
     audit_id = str(uuid.uuid4())
     temp_dir = None
 
@@ -161,7 +190,7 @@ def start_audit():
     _store(audit_id, status="queued", progress=0, phase="Queued", source_path=source_path)
 
     t = threading.Thread(
-        target=_run_audit, args=(audit_id, source_path, temp_dir, user_api_key), daemon=True
+        target=_run_audit, args=(audit_id, source_path, temp_dir, user_api_key, checkers), daemon=True
     )
     t.start()
 
