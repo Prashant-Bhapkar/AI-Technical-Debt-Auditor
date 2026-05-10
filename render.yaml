@@ -3,6 +3,7 @@ services:
   - type: web
     name: debt-auditor-api
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python run_backend.py
     envVars:
@@ -17,6 +18,7 @@ services:
   - type: web
     name: debt-auditor-ui
     runtime: static
+    plan: free
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
     routes:
