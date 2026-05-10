@@ -1,5 +1,5 @@
 const BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
+  ? `https://${import.meta.env.VITE_API_URL}/api`
   : "/api";
 
 function _storedKey(): string {

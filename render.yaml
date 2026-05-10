@@ -28,4 +28,4 @@ services:
         fromService:
           name: debt-auditor-api
           type: web
-          property: onRenderUrl
+          property: host
