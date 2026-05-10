@@ -56,9 +56,14 @@ The API key is entered in the UI, stored only in your browser, and never saved o
 
 ## Screenshots
 
-| Home | Report | AI Insights |
-|---|---|---|
-| _(paste screenshot)_ | _(paste screenshot)_ | _(paste screenshot)_ |
+**Home — choose your checks**
+![Home](docs/screenshots/home.png)
+
+**Audit Report — scored findings with file + line references**
+![Report](docs/screenshots/report.png)
+
+**AI Insights & Q&A — architecture analysis + chat**
+![AI Insights](docs/screenshots/ai-insights.png)
 
 ---
 
