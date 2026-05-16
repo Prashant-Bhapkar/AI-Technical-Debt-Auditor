@@ -22,10 +22,20 @@ def init_qa_routes(audits: dict, lock):
 
 
 def _get_audit(audit_id: str) -> dict | None:
+    # Try user-provided Redis first (BYOR)
+    user_url = request.headers.get("X-Redis-Url", "").strip()
+    if user_url:
+        try:
+            from backend.core.audit_store import PerRequestStore
+            return PerRequestStore(user_url).get_data(audit_id)
+        except Exception:
+            pass
+    # Fall back to global store
     if _audits_ref is None or _lock_ref is None:
         return None
     with _lock_ref:
-        return dict(_audits_ref.get(audit_id, {}))
+        d = _audits_ref.get(audit_id, {})
+        return dict(d) if d else None
 
 
 def _reconstruct_findings(raw: list[dict]) -> list[Finding]:

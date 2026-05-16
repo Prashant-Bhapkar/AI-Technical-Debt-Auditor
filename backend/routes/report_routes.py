@@ -23,6 +23,18 @@ def init_report_routes(audits: dict, lock):
 
 
 def _get_result(audit_id: str) -> dict | None:
+    from flask import request as _req
+    # Try user-provided Redis first (BYOR)
+    user_url = _req.headers.get("X-Redis-Url", "").strip()
+    if user_url:
+        try:
+            from backend.core.audit_store import PerRequestStore
+            audit = PerRequestStore(user_url).get_data(audit_id)
+            if audit and audit.get("status") == "done":
+                return audit.get("result")
+        except Exception:
+            pass
+    # Fall back to global store
     if _audits_ref is None or _lock_ref is None:
         return None
     with _lock_ref:

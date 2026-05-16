@@ -110,3 +110,32 @@ def get_proxy() -> tuple[Any, Any]:
     if USING_REDIS:
         return _RedisProxy(), _DummyLock()
     return _audits, _lock
+
+
+# ── Per-request store (user-supplied Redis URL) ───────────────────────────────
+
+class PerRequestStore:
+    """
+    Connects to a user-provided Redis URL for per-audit state isolation.
+    Used when the browser sends X-Redis-Url header (BYOR — bring your own Redis).
+    """
+
+    def __init__(self, redis_url: str) -> None:
+        import redis as redis_lib  # type: ignore
+        import ssl as _ssl
+        kwargs: dict[str, Any] = {"socket_connect_timeout": 3, "decode_responses": False}
+        if redis_url.startswith("rediss://"):
+            kwargs["ssl_cert_reqs"] = _ssl.CERT_NONE
+        self._r = redis_lib.from_url(redis_url, **kwargs)
+        self._r.ping()  # validate on construction — raises on bad URL
+
+    def store_data(self, audit_id: str, **kwargs: Any) -> None:
+        key = f"audit:{audit_id}"
+        raw = self._r.get(key)
+        data: dict = json.loads(raw) if raw else {}
+        data.update(kwargs)
+        self._r.set(key, json.dumps(data), ex=_TTL)
+
+    def get_data(self, audit_id: str) -> dict | None:
+        raw = self._r.get(f"audit:{audit_id}")
+        return json.loads(raw) if raw else None

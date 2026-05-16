@@ -32,6 +32,7 @@ def execute_audit(
     temp_dir: str | None = None,
     api_key: str | None = None,
     checkers: list[str] | None = None,
+    state_store=None,  # PerRequestStore | None — uses global audit_store when None
 ) -> None:
     """
     Run every enabled checker, prioritize findings, and write the result to
@@ -48,7 +49,10 @@ def execute_audit(
     run: frozenset[str] = frozenset(checkers) if checkers is not None else ALL_CHECKERS
 
     def _store(**kwargs) -> None:
-        audit_store.store(audit_id, **kwargs)
+        if state_store is not None:
+            state_store.store_data(audit_id, **kwargs)
+        else:
+            audit_store.store(audit_id, **kwargs)
 
     try:
         _store(status="indexing", progress=5, phase="Setting up workspace")
