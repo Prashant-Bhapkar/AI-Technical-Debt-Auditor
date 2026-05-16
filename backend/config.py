@@ -5,6 +5,14 @@ COMPLEXITY_THRESHOLD = int(os.getenv("COMPLEXITY_THRESHOLD", "10"))
 DUPLICATE_SIMILARITY_THRESHOLD = float(os.getenv("DUPLICATE_SIMILARITY_THRESHOLD", "0.85"))
 MODEL_NAME = os.getenv("MODEL_NAME", "claude-haiku-4-5-20251001")
 
+# ── Feature 1: Async engine ────────────────────────────────────────────────────
+REDIS_URL = os.getenv("REDIS_URL", "")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+AUDIT_TIMEOUT_SECONDS = int(os.getenv("AUDIT_TIMEOUT_SECONDS", "600"))
+MAX_REPO_SIZE_MB = int(os.getenv("MAX_REPO_SIZE_MB", "200"))
+
+# ── Analysis thresholds ────────────────────────────────────────────────────────
 IGNORE_PATTERNS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv",
     ".env", "dist", "build", ".debt-audit", ".tox", ".pytest_cache",

@@ -1,0 +1,57 @@
+version: "3.9"
+
+# Local development stack for Feature 1 (Async Celery engine).
+#
+# Usage:
+#   docker compose up          # start Redis + Celery worker + Flower UI
+#   python run_backend.py      # Flask (run separately, reads REDIS_URL from .env)
+#   cd frontend && npm run dev # Vite dev server
+#
+# Or run everything together:
+#   docker compose --profile full up
+#
+# Flower (Celery monitoring) is available at http://localhost:5555
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - COMPLEXITY_THRESHOLD=${COMPLEXITY_THRESHOLD:-10}
+      - DUPLICATE_SIMILARITY_THRESHOLD=${DUPLICATE_SIMILARITY_THRESHOLD:-0.85}
+      - AUDIT_TIMEOUT_SECONDS=${AUDIT_TIMEOUT_SECONDS:-600}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - /tmp:/tmp  # share temp dirs between worker and host
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower:2.0
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery flower --broker=redis://redis:6379/0
+
+volumes:
+  redis_data:

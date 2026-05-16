@@ -7,6 +7,11 @@ function _storedKey(): string {
   catch { return ""; }
 }
 
+function _storedRedisUrl(): string {
+  try { return localStorage.getItem("user_redis_url") ?? ""; }
+  catch { return ""; }
+}
+
 export function setApiKey(key: string): void {
   try {
     if (key) localStorage.setItem("anthropic_api_key", key);
@@ -14,9 +19,16 @@ export function setApiKey(key: string): void {
   } catch { /* storage blocked */ }
 }
 
-export function getApiKey(): string {
-  return _storedKey();
+export function getApiKey(): string { return _storedKey(); }
+
+export function setRedisUrl(url: string): void {
+  try {
+    if (url) localStorage.setItem("user_redis_url", url);
+    else localStorage.removeItem("user_redis_url");
+  } catch { /* storage blocked */ }
 }
+
+export function getRedisUrl(): string { return _storedRedisUrl(); }
 
 export interface AuditStatus {
   audit_id: string;
@@ -104,8 +116,10 @@ export interface RecentAudit {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const key = _storedKey();
+  const redisUrl = _storedRedisUrl();
   const baseHeaders: Record<string, string> = { "Content-Type": "application/json" };
   if (key) baseHeaders["X-Anthropic-Api-Key"] = key;
+  if (redisUrl) baseHeaders["X-Redis-Url"] = redisUrl;
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { ...baseHeaders, ...(init?.headers as Record<string, string> ?? {}) },
