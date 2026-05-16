@@ -8,6 +8,14 @@ Environment variables (all optional — sensible defaults for local dev):
   AUDIT_TIMEOUT_SECONDS  Hard timeout per audit task (default: 600)
 """
 import os
+from pathlib import Path
+
+# Load .env so REDIS_URL etc. are available when the worker starts directly
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent.parent / ".env")
+except ImportError:
+    pass
 
 from celery import Celery  # type: ignore
 
