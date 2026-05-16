@@ -1,5 +1,10 @@
 import os
 
+# When True: requires X-Anthropic-Api-Key header and enforces per-IP rate limits.
+# Set to "true" only on the shared/public deployment (Render).
+# Leave unset (defaults to False) for local dev or self-hosted instances.
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 COMPLEXITY_THRESHOLD = int(os.getenv("COMPLEXITY_THRESHOLD", "10"))
 DUPLICATE_SIMILARITY_THRESHOLD = float(os.getenv("DUPLICATE_SIMILARITY_THRESHOLD", "0.85"))

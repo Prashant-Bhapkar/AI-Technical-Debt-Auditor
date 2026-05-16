@@ -9,6 +9,8 @@ services:
     envVars:
       - key: FLASK_DEBUG
         value: "false"
+      - key: DEMO_MODE
+        value: "true"   # enforces BYOK + 2-audits/day rate limit on this shared deployment
       - key: PYTHON_VERSION
         value: "3.11.0"
       - key: ANTHROPIC_API_KEY

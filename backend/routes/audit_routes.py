@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 
+from backend.config import DEMO_MODE
 from backend.core import audit_store
 from backend.core.audit_runner import execute_audit, ALL_CHECKERS
 from backend.limiter import limiter
@@ -87,7 +88,7 @@ def _clone_repo(url: str) -> tuple[str, str]:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @audit_bp.post("/start")
-@limiter.limit("2 per day")
+@limiter.limit("2 per day", exempt_when=lambda: not DEMO_MODE)
 def start_audit():
     body = request.get_json(silent=True) or {}
     repo_url = body.get("repo_url", "").strip()
@@ -95,9 +96,10 @@ def start_audit():
     if not repo_url:
         return jsonify(error="repo_url is required"), 400
 
-    # Require caller to provide their own Anthropic API key
     user_api_key = request.headers.get("X-Anthropic-Api-Key", "").strip() or None
-    if not user_api_key:
+
+    # In DEMO_MODE (shared public deployment) callers must supply their own key
+    if DEMO_MODE and not user_api_key:
         return jsonify(error="Add your Anthropic API key in Settings to run audits."), 403
 
     url_error = _validate_repo_url(repo_url)
