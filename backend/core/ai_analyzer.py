@@ -18,12 +18,13 @@ import json
 import os
 from typing import Any
 
-from backend.config import ANTHROPIC_API_KEY, MODEL_NAME
+from backend.config import ANTHROPIC_API_KEY, DEMO_MODE, MODEL_NAME
 from backend.core.checkers import Finding
 
 
 def _client(api_key: str | None = None):
-    key = api_key or ANTHROPIC_API_KEY
+    # In DEMO_MODE only use the caller-supplied key — never bill the server key
+    key = api_key if DEMO_MODE else (api_key or ANTHROPIC_API_KEY)
     if not key:
         return None
     try:

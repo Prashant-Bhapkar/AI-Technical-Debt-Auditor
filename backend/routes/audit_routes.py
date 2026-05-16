@@ -98,10 +98,6 @@ def start_audit():
 
     user_api_key = request.headers.get("X-Anthropic-Api-Key", "").strip() or None
 
-    # In DEMO_MODE (shared public deployment) callers must supply their own key
-    if DEMO_MODE and not user_api_key:
-        return jsonify(error="Add your Anthropic API key in Settings to run audits."), 403
-
     url_error = _validate_repo_url(repo_url)
     if url_error:
         return jsonify(error=url_error), 400
