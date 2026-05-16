@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Github, Clock, CheckCircle, XCircle, Loader2, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Github, Clock, CheckCircle, XCircle, Loader2, TrendingUp, ChevronDown, ChevronUp, KeyRound } from "lucide-react";
 import { api, type AuditStatus, type RecentAudit, getApiKey } from "../api/client";
 import clsx from "clsx";
 
@@ -268,9 +268,21 @@ export default function Home() {
             </div>
           )}
 
+          {/* API key gate */}
+          {!hasApiKey && (
+            <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-900/20
+                            border border-amber-800 rounded-lg px-3 py-2">
+              <KeyRound size={13} className="shrink-0" />
+              <span>
+                An Anthropic API key is required to run audits.
+                Click <strong>Settings</strong> in the top-right bar to add yours.
+              </span>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={!input.trim() || isRunning || selectedCheckers.size === 0}
+            disabled={!input.trim() || isRunning || selectedCheckers.size === 0 || !hasApiKey}
             className="w-full bg-sky-600 hover:bg-sky-500 disabled:bg-gray-700 disabled:text-gray-500
                        text-white font-semibold py-3 rounded-xl transition-colors flex items-center
                        justify-center gap-2"

@@ -10,25 +10,47 @@ Dispatch strategy (in priority order):
   1. X-Redis-Url header present  →  BYOR: per-request Redis + thread  (user's own Redis)
   2. Server REDIS_URL configured →  Celery async task                  (server Redis)
   3. No Redis at all             →  in-process background thread       (V1 fallback)
+
+Security:
+  - X-Anthropic-Api-Key header required — callers must supply their own key (403 otherwise)
+  - Rate-limited to 2 audit starts per IP per day via Flask-Limiter
+  - repo_url hostname must be github.com, gitlab.com, or bitbucket.org
 """
 import logging
 import tempfile
 import threading
 import time
 import uuid
+from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 
 from backend.core import audit_store
 from backend.core.audit_runner import execute_audit, ALL_CHECKERS
+from backend.limiter import limiter
 
 log = logging.getLogger(__name__)
 audit_bp = Blueprint("audit", __name__, url_prefix="/api/audit")
+
+ALLOWED_HOSTS = {"github.com", "gitlab.com", "bitbucket.org"}
 
 
 def get_audits_store():
     """Expose store proxy + lock to qa_routes / report_routes."""
     return audit_store.get_proxy()
+
+
+def _validate_repo_url(url: str) -> str | None:
+    """Return None if valid, or an error string if not."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return "URL must use http:// or https://"
+        if parsed.hostname not in ALLOWED_HOSTS:
+            return "Only GitHub, GitLab, and Bitbucket repositories are supported"
+        return None
+    except Exception:
+        return "Invalid URL format"
 
 
 def _per_request_store(req):
@@ -55,7 +77,7 @@ def _read_audit(audit_id: str, per_store=None) -> dict | None:
 
 
 def _clone_repo(url: str) -> tuple[str, str]:
-    """Shallow-clone a GitHub repo. Returns (temp_dir, source_root)."""
+    """Shallow-clone a repo. Returns (temp_dir, source_root)."""
     import git  # type: ignore
     temp_dir = tempfile.mkdtemp(prefix="debt-audit-")
     git.Repo.clone_from(url, temp_dir, depth=1)
@@ -65,15 +87,23 @@ def _clone_repo(url: str) -> tuple[str, str]:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @audit_bp.post("/start")
+@limiter.limit("2 per day")
 def start_audit():
     body = request.get_json(silent=True) or {}
     repo_url = body.get("repo_url", "").strip()
-    local_path = body.get("local_path", "").strip()
 
-    if not repo_url and not local_path:
-        return jsonify(error="Provide repo_url or local_path"), 400
+    if not repo_url:
+        return jsonify(error="repo_url is required"), 400
 
+    # Require caller to provide their own Anthropic API key
     user_api_key = request.headers.get("X-Anthropic-Api-Key", "").strip() or None
+    if not user_api_key:
+        return jsonify(error="Add your Anthropic API key in Settings to run audits."), 403
+
+    url_error = _validate_repo_url(repo_url)
+    if url_error:
+        return jsonify(error=url_error), 400
+
     requested_checkers = body.get("checkers")
     checkers: list[str] | None = (
         list(set(requested_checkers) & ALL_CHECKERS) if requested_checkers else None
@@ -91,21 +121,12 @@ def start_audit():
         else:
             audit_store.store(audit_id, **kwargs)
 
-    if repo_url:
-        if "github.com" not in repo_url and not repo_url.startswith("http"):
-            return jsonify(error="Invalid repo URL"), 400
-        _init_store(status="cloning", progress=2, phase="Cloning repository",
-                    started_at=time.time())
-        try:
-            temp_dir, source_path = _clone_repo(repo_url)
-        except Exception as exc:
-            return jsonify(error=f"Clone failed: {exc}"), 400
-    else:
-        import os
-        source_path = local_path
-        if not os.path.isdir(source_path):
-            return jsonify(error=f"Directory not found: {local_path}"), 400
-        _init_store(started_at=time.time())
+    _init_store(status="cloning", progress=2, phase="Cloning repository",
+                started_at=time.time())
+    try:
+        temp_dir, source_path = _clone_repo(repo_url)
+    except Exception as exc:
+        return jsonify(error=f"Clone failed: {exc}"), 400
 
     _init_store(status="queued", progress=0, phase="Queued", source_path=source_path)
 

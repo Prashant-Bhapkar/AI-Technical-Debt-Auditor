@@ -2,10 +2,11 @@
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 from backend.core import audit_store
+from backend.limiter import limiter
 from backend.routes.audit_routes import audit_bp, get_audits_store
 from backend.routes.qa_routes import qa_bp, init_qa_routes
 from backend.routes.report_routes import report_bp, init_report_routes
@@ -19,6 +20,12 @@ def create_app() -> Flask:
 
     # Connect to Redis if configured; silently falls back to in-memory store
     audit_store.init()
+
+    limiter.init_app(app)
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return jsonify(error="Rate limit reached: 2 audits per day per IP. Try again tomorrow."), 429
 
     app.register_blueprint(audit_bp)
 
