@@ -29,7 +29,11 @@ def init(redis_url: str | None = None) -> bool:
         return False
     try:
         import redis  # type: ignore
-        r = redis.from_url(url, socket_connect_timeout=3, decode_responses=False)
+        import ssl as _ssl
+        kwargs = {"socket_connect_timeout": 3, "decode_responses": False}
+        if url.startswith("rediss://"):
+            kwargs["ssl_cert_reqs"] = _ssl.CERT_NONE
+        r = redis.from_url(url, **kwargs)
         r.ping()
         _redis_client = r
         USING_REDIS = True

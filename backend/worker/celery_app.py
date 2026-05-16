@@ -8,6 +8,7 @@ Environment variables (all optional — sensible defaults for local dev):
   AUDIT_TIMEOUT_SECONDS  Hard timeout per audit task (default: 600)
 """
 import os
+import ssl
 from pathlib import Path
 
 # Load .env so REDIS_URL etc. are available when the worker starts directly
@@ -23,6 +24,9 @@ _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 BROKER = os.environ.get("CELERY_BROKER_URL", _REDIS_URL)
 BACKEND = os.environ.get("CELERY_RESULT_BACKEND", _REDIS_URL)
 _TIMEOUT = int(os.environ.get("AUDIT_TIMEOUT_SECONDS", "600"))
+
+# Upstash (and any rediss:// URL) requires explicit SSL options in Celery
+_SSL_OPTS = {"ssl_cert_reqs": ssl.CERT_NONE} if _REDIS_URL.startswith("rediss://") else {}
 
 celery = Celery(
     "debt_auditor",
@@ -44,4 +48,9 @@ celery.conf.update(
     task_time_limit=_TIMEOUT + 60,
     # Keep results for 24 h
     result_expires=86400,
+    # SSL settings for rediss:// (Upstash, etc.)
+    **( {
+        "broker_use_ssl": _SSL_OPTS,
+        "redis_backend_use_ssl": _SSL_OPTS,
+    } if _SSL_OPTS else {} ),
 )
