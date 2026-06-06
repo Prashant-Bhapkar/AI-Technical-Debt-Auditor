@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 
-from backend.config import DEMO_MODE
+from backend.config import DEMO_MODE, USE_CELERY
 from backend.core import audit_store
 from backend.core.audit_runner import execute_audit, ALL_CHECKERS
 from backend.limiter import limiter
@@ -129,8 +129,12 @@ def start_audit():
     _init_store(status="queued", progress=0, phase="Queued", source_path=source_path)
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
+    # Priority:
+    #   1. user's Redis (X-Redis-Url header) → thread + their Redis
+    #   2. USE_CELERY=true + server Redis    → Celery worker (needs worker running locally)
+    #   3. server Redis only                 → thread + server Redis (no Celery worker needed)
+    #   4. no Redis                          → thread + memory
     if per_store is not None:
-        # BYOR Redis: thread mode with user's Redis as state store
         t = threading.Thread(
             target=execute_audit,
             kwargs=dict(audit_id=audit_id, source_path=source_path,
@@ -139,11 +143,12 @@ def start_audit():
             daemon=True,
         )
         t.start()
-        log.info("Audit %s started with user-provided Redis", audit_id)
+        log.info("Audit %s → thread + user Redis", audit_id)
 
-    elif audit_store.USING_REDIS:
-        # Server Redis: Celery async task
-        from backend.worker.audit_job import run_audit  # lazy — only when Redis ready
+    elif audit_store.USING_REDIS and USE_CELERY:
+        # Celery path — only active when USE_CELERY=true env var is set
+        # Requires a Celery worker running: celery -A backend.worker.celery_app worker --pool=solo
+        from backend.worker.audit_job import run_audit
         run_audit.delay(
             audit_id=audit_id,
             source_path=source_path,
@@ -151,17 +156,20 @@ def start_audit():
             api_key=user_api_key,
             checkers=checkers,
         )
-        log.info("Audit %s queued via Celery", audit_id)
+        log.info("Audit %s → Celery + server Redis", audit_id)
 
     else:
-        # V1 fallback: in-process thread, in-memory store
+        # Thread always works — state auto-saves to server Redis (if set) or memory
         t = threading.Thread(
             target=execute_audit,
-            args=(audit_id, source_path, temp_dir, user_api_key, checkers),
+            kwargs=dict(audit_id=audit_id, source_path=source_path,
+                        temp_dir=temp_dir, api_key=user_api_key,
+                        checkers=checkers),
             daemon=True,
         )
         t.start()
-        log.info("Audit %s started in thread (no Redis)", audit_id)
+        mode = "server Redis" if audit_store.USING_REDIS else "memory"
+        log.info("Audit %s → thread + %s", audit_id, mode)
 
     return jsonify(audit_id=audit_id), 202
 

@@ -5,6 +5,10 @@ import os
 # Leave unset (defaults to False) for local dev or self-hosted instances.
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
+# Set USE_CELERY=true only when a Celery worker is also running (local dev or dedicated worker).
+# When false (default), audits run in a background thread even if REDIS_URL is set.
+USE_CELERY = os.getenv("USE_CELERY", "false").lower() == "true"
+
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 COMPLEXITY_THRESHOLD = int(os.getenv("COMPLEXITY_THRESHOLD", "10"))
 DUPLICATE_SIMILARITY_THRESHOLD = float(os.getenv("DUPLICATE_SIMILARITY_THRESHOLD", "0.85"))
