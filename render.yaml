@@ -38,21 +38,20 @@ services:
           type: web
           property: host
 
-  # ── Celery worker (Feature 1) ──────────────────────────────────────────────
-  # Uncomment after adding Redis. Free plan; upgrade to Starter for production.
-  # - type: worker
-  #   name: debt-auditor-worker
-  #   runtime: python
-  #   plan: free
-  #   buildCommand: pip install -r requirements.txt
-  #   startCommand: celery -A backend.worker.celery_app worker --loglevel=info --concurrency=2
-  #   envVars:
-  #     - key: REDIS_URL
-  #       sync: false
-  #     - key: ANTHROPIC_API_KEY
-  #       sync: false
-  #     - key: AUDIT_TIMEOUT_SECONDS
-  #       value: "600"
+  # ── Celery worker ─────────────────────────────────────────────────────────
+  - type: worker
+    name: debt-auditor-worker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A backend.worker.celery_app worker --loglevel=info --concurrency=1
+    envVars:
+      - key: REDIS_URL
+        sync: false   # same Upstash URL as the API service — set manually in Render dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false   # same key as the API service — set manually in Render dashboard
+      - key: AUDIT_TIMEOUT_SECONDS
+        value: "600"
 
   # ── Redis (Feature 1) ─────────────────────────────────────────────────────
   # Render managed Redis — free tier available.
